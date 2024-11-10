@@ -10,7 +10,16 @@ import (
 	"time"
 )
 
-const defaultFormat = time.RFC3339
+const (
+	TimeFormat      = time.RFC3339
+	ApproxBufSize   = 256
+	ResultBufSize   = ApproxBufSize / 2
+	TotalWorkTime   = 10 * time.Second
+	NewTaskInterval = 100 * time.Millisecond
+	PrintInterval   = 3 * time.Second
+)
+
+// ============================================================================
 
 type TaskResult struct {
 	ID       int64
@@ -19,7 +28,7 @@ type TaskResult struct {
 }
 
 func (t TaskResult) String() string {
-	return fmt.Sprintf("(Ok) Task %-19d: [Created: %s, Duration: %s]", t.ID, t.Created.Format(defaultFormat), t.Duration)
+	return fmt.Sprintf("(Ok) Task %-19d: [Created: %s, Duration: %s]", t.ID, t.Created.Format(TimeFormat), t.Duration)
 }
 
 type TaskError struct {
@@ -29,7 +38,7 @@ type TaskError struct {
 }
 
 func (e TaskError) Error() string {
-	return fmt.Sprintf("(Err) Task %-19d, [Created: %s, Message: %s]", e.ID, e.Created.Format(defaultFormat), e.Message)
+	return fmt.Sprintf("(Err) Task %-19d, [Created: %s, Message: %s]", e.ID, e.Created.Format(TimeFormat), e.Message)
 }
 
 type TaskFunc func() (TaskResult, error)
@@ -63,7 +72,7 @@ func heavyTask(ctx context.Context, id int64, created time.Time) (TaskResult, er
 }
 
 func taskProducer(ctx context.Context, tasksChan chan<- TaskFunc) {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(NewTaskInterval)
 	defer ticker.Stop()
 
 	for {
@@ -123,25 +132,22 @@ func printRes(buf []TaskResult) {
 // ============================================================================
 
 func main() {
-	var approxBufSize = 256
-	var resultBufSize = approxBufSize / 2
-	var numWorkers = 1
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), TotalWorkTime)
 	defer cancel()
 
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(PrintInterval)
 	defer ticker.Stop()
 
 	var wg sync.WaitGroup
 
-	tasksChan := make(chan TaskFunc, approxBufSize)
-	resChan := make(chan TaskResult, resultBufSize)
-	errChan := make(chan error, resultBufSize)
+	tasksChan := make(chan TaskFunc, ApproxBufSize)
+	resChan := make(chan TaskResult, ResultBufSize)
+	errChan := make(chan error, ResultBufSize)
 
 	// --------------------------------------
 
 	numCPU := runtime.NumCPU()
+	numWorkers := 1
 	if numCPU > 2 {
 		numWorkers = numCPU - 2
 	}
@@ -155,8 +161,8 @@ func main() {
 
 	// --------------------------------------
 
-	resBuf := make([]TaskResult, 0, resultBufSize)
-	errBuf := make([]error, 0, resultBufSize)
+	resBuf := make([]TaskResult, 0, ResultBufSize)
+	errBuf := make([]error, 0, ResultBufSize)
 
 	for {
 		select {
