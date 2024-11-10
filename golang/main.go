@@ -46,7 +46,6 @@ type TaskFunc func() (TaskResult, error)
 // ============================================================================
 
 func heavyTask(ctx context.Context, id int64, created time.Time) (TaskResult, error) {
-
 	if time.Now().Nanosecond()/1000%2 > 0 {
 		return TaskResult{}, TaskError{ID: id, Created: created, Message: "Bad nanoseconds"}
 	}
@@ -91,7 +90,7 @@ func taskProducer(ctx context.Context, tasksChan chan<- TaskFunc) {
 	}
 }
 
-func taskConsumer(
+func taskWorker(
 	tasksChan <-chan TaskFunc,
 	resChan chan<- TaskResult,
 	errChan chan<- error,
@@ -156,7 +155,7 @@ func main() {
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go taskConsumer(tasksChan, resChan, errChan, &wg)
+		go taskWorker(tasksChan, resChan, errChan, &wg)
 	}
 
 	// --------------------------------------
