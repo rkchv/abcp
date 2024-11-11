@@ -67,18 +67,28 @@ func (e TaskError) Error() string {
 
 // ============================================================================
 
-func taskProducer(ctx context.Context, tasksChan chan<- Task) {
+func taskProducer(
+	ctx context.Context,
+	tasksChan chan<- Task,
+	wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+
 	ticker := time.NewTicker(NewTaskInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			close(tasksChan)
 			return
 
 		case <-ticker.C:
-			tasksChan <- NewTask(rand.Int63(), time.Now())
+			newTask := NewTask(rand.Int63(), time.Now())
+
+			select {
+			case tasksChan <- newTask:
+			default:
+			}
 		}
 	}
 }
@@ -146,7 +156,8 @@ func main() {
 		numWorkers = numCPU - 2
 	}
 
-	go taskProducer(ctx, tasksChan)
+	wg.Add(1)
+	go taskProducer(ctx, tasksChan, &wg)
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
@@ -161,6 +172,7 @@ func main() {
 	for {
 		select {
 		case <-ctx.Done():
+      close(tasksChan)
 			wg.Wait()
 			close(resChan)
 			close(errChan)
