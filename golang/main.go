@@ -64,8 +64,6 @@ func (t Task) Exec(ctx context.Context) (TaskResult, error) {
 	return res, nil
 }
 
-
-
 func (t TaskResult) String() string {
 	return fmt.Sprintf("(Ok) Task %-19d: [Created: %s, Duration: %s]", t.ID, t.Created.Format(TimeFormat), t.Duration)
 }
@@ -73,8 +71,6 @@ func (t TaskResult) String() string {
 func (e TaskError) Error() string {
 	return fmt.Sprintf("(Err) Task %-19d, [Created: %s, Message: %s]", e.ID, e.Created.Format(TimeFormat), e.Message)
 }
-
-type TaskFunc func() (TaskResult, error)
 
 // ============================================================================
 
