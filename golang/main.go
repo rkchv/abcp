@@ -172,7 +172,7 @@ func main() {
 	for {
 		select {
 		case <-ctx.Done():
-      			close(tasksChan)
+      		close(tasksChan)
 			wg.Wait()
 			close(resChan)
 			close(errChan)
