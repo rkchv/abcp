@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"runtime"
@@ -40,7 +39,7 @@ func NewTask(id int64, created time.Time) Task {
 	return Task{ID: id, Created: created}
 }
 
-func (t Task) Exec(ctx context.Context) (TaskResult, error) {
+func (t Task) Exec() (TaskResult, error) {
 	if time.Now().Nanosecond()/1000%2 > 0 {
 		return TaskResult{}, TaskError{Task: Task{ID: t.ID, Created: t.Created}, Message: "Bad Nanoseconds"}
 	}
@@ -53,10 +52,6 @@ func (t Task) Exec(ctx context.Context) (TaskResult, error) {
 	res := TaskResult{
 		Task:     Task{ID: t.ID, Created: t.Created},
 		Duration: duration,
-	}
-
-	if ctx.Err() != nil {
-		return TaskResult{}, ctx.Err()
 	}
 
 	return res, nil
@@ -98,12 +93,13 @@ func taskWorker(
 	defer wg.Done()
 
 	for task := range tasksChan {
-		res, err := task.Exec(ctx)
+		res, err := task.Exec()
+
+		if ctx.Err() != nil {
+			return
+		}
 
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
-				return
-			}
 			errChan <- err
 			continue
 		}
