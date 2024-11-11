@@ -21,20 +21,53 @@ const (
 
 // ============================================================================
 
+type Task struct {
+	ID      int64
+	Created time.Time
+}
+
 type TaskResult struct {
-	ID       int64
-	Created  time.Time
+	Task
 	Duration time.Duration
 }
 
-func (t TaskResult) String() string {
-	return fmt.Sprintf("(Ok) Task %-19d: [Created: %s, Duration: %s]", t.ID, t.Created.Format(TimeFormat), t.Duration)
+type TaskError struct {
+	Task
+	Message string
 }
 
-type TaskError struct {
-	ID      int64
-	Created time.Time
-	Message string
+func NewTask(id int64, created time.Time) Task {
+	return Task{ID: id, Created: created}
+}
+
+func (t Task) Exec(ctx context.Context) (TaskResult, error) {
+	if time.Now().Nanosecond()/1000%2 > 0 {
+		return TaskResult{}, TaskError{Task: Task{ID: t.ID, Created: t.Created}, Message: "Bad nanoseconds"}
+	}
+
+	// --------------------------------------
+	sleepTime := time.Duration(rand.Intn(135)+85) * time.Millisecond
+	time.Sleep(sleepTime)
+	// --------------------------------------
+
+	duration := time.Since(t.Created)
+
+	res := TaskResult{
+		Task:     Task{ID: t.ID, Created: t.Created},
+		Duration: duration,
+	}
+
+	if ctx.Err() != nil {
+		return TaskResult{}, ctx.Err()
+	}
+
+	return res, nil
+}
+
+
+
+func (t TaskResult) String() string {
+	return fmt.Sprintf("(Ok) Task %-19d: [Created: %s, Duration: %s]", t.ID, t.Created.Format(TimeFormat), t.Duration)
 }
 
 func (e TaskError) Error() string {
@@ -45,32 +78,7 @@ type TaskFunc func() (TaskResult, error)
 
 // ============================================================================
 
-func heavyTask(ctx context.Context, id int64, created time.Time) (TaskResult, error) {
-	if time.Now().Nanosecond()/1000%2 > 0 {
-		return TaskResult{}, TaskError{ID: id, Created: created, Message: "Bad nanoseconds"}
-	}
-
-	// --------------------------------------
-	sleepTime := time.Duration(rand.Intn(135)+85) * time.Millisecond
-	time.Sleep(sleepTime)
-	// --------------------------------------
-
-	duration := time.Since(created)
-
-	newTask := TaskResult{
-		ID:       id,
-		Created:  created,
-		Duration: duration,
-	}
-
-	if ctx.Err() != nil {
-		return TaskResult{}, ctx.Err()
-	}
-
-	return newTask, nil
-}
-
-func taskProducer(ctx context.Context, tasksChan chan<- TaskFunc) {
+func taskProducer(ctx context.Context, tasksChan chan<- Task) {
 	ticker := time.NewTicker(NewTaskInterval)
 	defer ticker.Stop()
 
@@ -81,17 +89,14 @@ func taskProducer(ctx context.Context, tasksChan chan<- TaskFunc) {
 			return
 
 		case <-ticker.C:
-			newTask := func() (TaskResult, error) {
-				return heavyTask(ctx, rand.Int63(), time.Now())
-			}
-
-			tasksChan <- newTask
+			tasksChan <- NewTask(rand.Int63(), time.Now())
 		}
 	}
 }
 
 func taskWorker(
-	tasksChan <-chan TaskFunc,
+	ctx context.Context,
+	tasksChan <-chan Task,
 	resChan chan<- TaskResult,
 	errChan chan<- error,
 	wg *sync.WaitGroup,
@@ -99,7 +104,7 @@ func taskWorker(
 	defer wg.Done()
 
 	for task := range tasksChan {
-		res, err := task()
+		res, err := task.Exec(ctx)
 
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -139,7 +144,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	tasksChan := make(chan TaskFunc, ApproxBufSize)
+	tasksChan := make(chan Task, ApproxBufSize)
 	resChan := make(chan TaskResult, ResultBufSize)
 	errChan := make(chan error, ResultBufSize)
 
@@ -155,7 +160,7 @@ func main() {
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go taskWorker(tasksChan, resChan, errChan, &wg)
+		go taskWorker(ctx, tasksChan, resChan, errChan, &wg)
 	}
 
 	// --------------------------------------
