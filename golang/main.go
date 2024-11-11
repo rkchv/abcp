@@ -42,13 +42,11 @@ func NewTask(id int64, created time.Time) Task {
 
 func (t Task) Exec(ctx context.Context) (TaskResult, error) {
 	if time.Now().Nanosecond()/1000%2 > 0 {
-		return TaskResult{}, TaskError{Task: Task{ID: t.ID, Created: t.Created}, Message: "Bad nanoseconds"}
+		return TaskResult{}, TaskError{Task: Task{ID: t.ID, Created: t.Created}, Message: "Bad Nanoseconds"}
 	}
 
-	// --------------------------------------
 	sleepTime := time.Duration(rand.Intn(135)+85) * time.Millisecond
 	time.Sleep(sleepTime)
-	// --------------------------------------
 
 	duration := time.Since(t.Created)
 
